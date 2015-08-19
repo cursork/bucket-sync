@@ -1,6 +1,6 @@
 # bucket-sync
 
-Sync two buckets, even across isolated regions.
+Sync two AWS S3 buckets, even across isolated regions.
 
 You probably don't need this unless you are operating in China and have to
 sync data between an S3 bucket there and one in the rest of the world.
@@ -21,6 +21,8 @@ Where someconfig.clj follows the pattern of config/example.clj
   multipart uploads, this will be broken.
 
 ## License
+
+MIT License. See LICENSE.
 
 Copyright © 2015 Neil Kirsopp
 
