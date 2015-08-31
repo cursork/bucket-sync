@@ -32,6 +32,7 @@
         b64/encode
         (String.))))
 
+;; TODO this only gets up to 1000 keys
 (defn missing-keys
   [from-p from-bucket to-p to-bucket key-prefix]
   (let [keys-to-etags (fn [p b]
@@ -40,24 +41,30 @@
                              (reduce
                                #(assoc %1 (:key %2) (:etag %2))
                                {})))
+        _ (timbre/info "Fetching from IDs")
         from (keys-to-etags from-p from-bucket)
+        _ (timbre/info "Got from IDs")
+        _ (timbre/info "Fetching to IDs")
         to   (keys-to-etags to-p   to-bucket)
+        _ (timbre/info "Got to IDs")
         missing (fn [[k etag]]
                   (if (= (to k) (from k))
-                    nil ;; Match
+                    ;nil ;; Match
+                    [k true] ;; TODO temporary
                     (if (contains? to k) ;; Contained but etag difference, overwrite
                       [k true]
                       [k false])))]
     (keep missing from)))
 
 (defn stream-object
-  [from-p from-bucket from-key to-p to-bucket to-key]
-  (let [metadata (s3/get-object-metadata from-p {:bucket-name from-bucket :key from-key})
+  [cfg from-p from-bucket from-key to-p to-bucket to-key]
+  (let [force-metadata (or (:force-metadata cfg) {})
+        metadata (s3/get-object-metadata from-p {:bucket-name from-bucket :key from-key})
         stream   (:object-content (s3/get-object from-p {:bucket-name from-bucket :key from-key}))]
     (s3/put-object to-p {:bucket-name  to-bucket
                          :key          to-key
                          :input-stream stream
-                         :metadata     metadata})))
+                         :metadata     (merge metadata force-metadata)})))
 
 (defn valid-aws-creds?
   [{:keys [profile endpoint]}]
@@ -72,7 +79,7 @@
       nil)))
 
 (defn sync-missing-keys
-  [from-p from-bucket to-p to-bucket ks]
+  [cfg from-p from-bucket to-p to-bucket ks]
   (let [ks-ch     (chan)
         mk-worker (fn [i]
                     (go-loop []
@@ -80,7 +87,7 @@
                         (if overwrite
                           (timbre/info (str "(" i ") Overwriting " k "..."))
                           (timbre/info (str "(" i ") Copying " k "...")))
-                        (stream-object from-p from-bucket k to-p to-bucket k)
+                        (stream-object cfg from-p from-bucket k to-p to-bucket k)
                         (recur))))
         workers (mapv mk-worker (range 5))]
     (timbre/info "Starting sync...")
@@ -89,9 +96,9 @@
     (timbre/info "Finished sync...")))
 
 (defn one-sync
-  [from-p from-bucket to-p to-bucket key-prefix]
+  [cfg from-p from-bucket to-p to-bucket key-prefix]
   (->> (missing-keys from-p from-bucket to-p to-bucket key-prefix)
-       (sync-missing-keys from-p from-bucket to-p to-bucket)))
+       (sync-missing-keys cfg from-p from-bucket to-p to-bucket)))
 
 (defn -main
   [config & args]
@@ -103,6 +110,6 @@
     (assert (valid-aws-creds? to-profile))
     (when log
       (timbre/merge-config! log))
-    (one-sync from-profile from-bucket to-profile to-bucket (or key-prefix ""))
+    (one-sync cfg from-profile from-bucket to-profile to-bucket (or key-prefix ""))
     (shutdown-agents)))
 
