@@ -39,13 +39,13 @@
 
 (defn stream-object
   [cfg from-p from-bucket from-key to-p to-bucket to-key]
-  (let [force-metadata (or (:force-metadata cfg) {})
-        metadata (s3/get-object-metadata from-p {:bucket-name from-bucket :key from-key})
-        stream   (:object-content (s3/get-object from-p {:bucket-name from-bucket :key from-key}))]
+  (let [obj      (s3/get-object from-p {:bucket-name from-bucket :key from-key})
+        metadata (:object-metadata obj)
+        stream   (:object-content obj)]
     (s3/put-object to-p {:bucket-name  to-bucket
                          :key          to-key
                          :input-stream stream
-                         :metadata     (merge metadata force-metadata)})))
+                         :metadata     metadata})))
 
 (defn valid-aws-creds?
   [{:keys [profile endpoint]}]
