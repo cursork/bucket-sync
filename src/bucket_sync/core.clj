@@ -84,7 +84,8 @@
   [p bucket k etag]
   (try
     (let [md (s3/get-object-metadata p {:bucket-name bucket :key k})]
-      (= etag (:etag md)))
+      (= etag (:etag md))
+      #_true)
     (catch AmazonS3Exception e
       (if (= 404 (.getStatusCode e))
         nil
@@ -96,9 +97,11 @@
         mk-worker (fn [i]
                     (go-loop []
                       (when-let [[k etag] (<! from-ks-ch)]
-                        (when-not (exists-etag-matches? to-p to-bucket k etag)
-                          (synchro-prn [i k etag])
-                          (stream-object cfg from-p from-bucket k to-p to-bucket k))
+                        (if-not (exists-etag-matches? to-p to-bucket k etag)
+                          (do
+                            (synchro-prn [i k etag])
+                            (stream-object cfg from-p from-bucket k to-p to-bucket k))
+                          (synchro-prn "Skipping" k))
                         (recur))))
         workers (mapv mk-worker (range 5))]
     (timbre/info "Starting sync...")
